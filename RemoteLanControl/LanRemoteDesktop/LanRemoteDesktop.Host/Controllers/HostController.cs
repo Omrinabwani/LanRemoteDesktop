@@ -144,8 +144,14 @@ namespace LanRemoteDesktop.Host.Controllers
 
             _streamCts = null;
 
-            try { cts.Cancel(); }
-            finally { cts.Dispose(); }
+            try 
+            {
+                cts.Cancel(); 
+            }
+            finally 
+            { 
+                cts.Dispose(); 
+            }
 
             _streamTask = null;
             _log.Info("Streaming stopped.");
