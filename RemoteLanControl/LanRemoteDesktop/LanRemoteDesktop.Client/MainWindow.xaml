@@ -3,15 +3,31 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:LanRemoteDesktop.Client"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="MainWindow"
+        Height="450"
+        Width="800">
+
     <Grid>
-        <Image x:Name="RemoteImage"
-           Stretch="Uniform"
-           HorizontalAlignment="Stretch"
-           VerticalAlignment="Stretch"/>
-        <Button Content="Stop" Click="Stop_Click" />
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Image Grid.Row="0"
+               x:Name="RemoteImage"
+               Focusable="True"
+               MouseEnter="RemoteImage_MouseEnter"
+               MouseMove="RemoteImage_MouseMove"
+               MouseLeftButtonDown="RemoteImage_MouseLeftButtonDown"
+               MouseLeftButtonUp="RemoteImage_MouseLeftButtonUp"
+               MouseRightButtonDown="RemoteImage_MouseRightButtonDown"
+               MouseRightButtonUp="RemoteImage_MouseRightButtonUp"
+               KeyDown="RemoteImage_KeyDown"
+               KeyUp="RemoteImage_KeyUp" />
+
+        <Button Grid.Row="1"
+                Content="Stop"
+                Click="Stop_Click" />
     </Grid>
-    
 </Window>

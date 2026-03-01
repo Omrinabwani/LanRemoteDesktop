@@ -1,47 +1,74 @@
-﻿using LanRemoteDesktop.Common.Networking;
+﻿using LanRemoteDesktop.Common.Logger;
+using LanRemoteDesktop.Common.Networking;
 using LanRemoteDesktop.Common.Protocol;
+using LanRemoteDesktop.Host.Input;
 using LanRemoteDesktop.Host.Networking;
-using System.Windows;
+using System;
 using System.IO;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Interop;
-using LanRemoteDesktop.Common.Logger;
+using System.Windows.Media.Imaging;
+
 namespace LanRemoteDesktop.Host.Controllers
 {
     public sealed class HostController
     {
         private CancellationTokenSource? _streamCts;
         private Task? _streamTask;
+
         private readonly HostServer _server = new HostServer();
         private readonly ILogger _log;
-        public HostController(ILogger log) 
+        private readonly InputInjector _inputInjector;
+
+        public HostController(ILogger log)
         {
             _log = log;
+            _inputInjector = new InputInjector();
         }
+
         public async Task RunAsync(int port, CancellationToken ct)
         {
             try
             {
                 _server.Start(port);
+
                 using var tcp = await _server.AcceptClientAsync(ct);
                 using var conn = new TcpConnection(tcp);
+
                 _log.Info($"Client connected: {conn.RemoteEndPoint}");
+
                 var reader = new FramedMessageReader(conn);
                 var writer = new FramedMessageWriter(conn);
-                var (type, helloPayload) = await reader.ReadAsync(ct);
+
+                // ---- Handshake ----
+                var (type, helloPayloadBytes) = await reader.ReadAsync(ct);
                 if (type != MessageType.Hello)
                     throw new InvalidOperationException($"Expected HELLO, got {type}.");
-                var hello = HelloPayload.Deserialize(helloPayload);
+
+                var hello = HelloPayload.Deserialize(helloPayloadBytes);
+
                 if (hello.ProtocolVersion != ProtocolConstants.ProtocolVersion)
-                    throw new InvalidOperationException($"Protocol version mismatch. Expected {ProtocolConstants.ProtocolVersion}, got {hello.ProtocolVersion}.");
+                    throw new InvalidOperationException(
+                        $"Protocol version mismatch. Expected {ProtocolConstants.ProtocolVersion}, got {hello.ProtocolVersion}.");
+
                 ushort width = (ushort)SystemParameters.PrimaryScreenWidth;
                 ushort height = (ushort)SystemParameters.PrimaryScreenHeight;
                 byte quality = hello.JpegQuality;
-                var welcome = new WelcomePayload(ProtocolConstants.ProtocolVersion,0, width, height, quality);
-                var payloadBytes = welcome.Serialize();
-                await writer.WriteAsync(MessageType.Welcome, payloadBytes, ct);
+
+                var welcome = new WelcomePayload(
+                    ProtocolConstants.ProtocolVersion,
+                    flags: 0,
+                    screenWidth: width,
+                    screenHeight: height,
+                    jpegQuality: quality);
+
+                await writer.WriteAsync(MessageType.Welcome, welcome.Serialize(), ct);
+
+                // ---- Main loop ----
                 while (!ct.IsCancellationRequested)
                 {
                     var (msgType, msgPayload) = await reader.ReadAsync(ct);
@@ -49,30 +76,31 @@ namespace LanRemoteDesktop.Host.Controllers
                     switch (msgType)
                     {
                         case MessageType.StartStream:
-                            _log.Info("StartStream");
-                            if (_streamTask == null || _streamTask.IsCompleted)
-                            {
-                                var start = StartStreamPayload.Deserialize(msgPayload);
-                                byte fps = start.Fps;
-                                _streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                                _streamTask = StreamLoopAsync(writer, quality, fps, _streamCts.Token);
-                                _log.Info($"Streaming started at {fps} FPS");
-                            }
-                            else
                             {
                                 StopStream();
+                                _log.Info("StartStream");
                                 var start = StartStreamPayload.Deserialize(msgPayload);
                                 byte fps = start.Fps;
-                                _streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                                _streamTask = StreamLoopAsync(writer, quality, fps, _streamCts.Token);
-                                _log.Info($"Streaming started at {fps} FPS");
-                            }
 
-                            break;
+                                StartStream(writer, quality, fps, ct);
+
+                                _log.Info($"Streaming started at {fps} FPS");
+                                break;
+                            }
 
                         case MessageType.StopStream:
                             _log.Info("StopStream");
                             StopStream();
+                            break;
+
+                        case MessageType.InputMouse:
+                            _log.Info("InputMouse");
+                            _inputInjector.InjectMouse(MouseInputPayload.Deserialize(msgPayload));
+                            break;
+
+                        case MessageType.InputKeyboard:
+                            _log.Info("InputKeyboard");
+                            _inputInjector.InjectKeyboard(KeyboardInputPayload.Deserialize(msgPayload));
                             break;
 
                         default:
@@ -83,43 +111,70 @@ namespace LanRemoteDesktop.Host.Controllers
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("An existing connection was forcibly closed by the remote host"))
+                StopStream();
+
+                // A bit nicer than string-contains, but keep your original behavior if you prefer.
+                if (ex is IOException || ex is SocketException || ex.Message.Contains("forcibly closed", StringComparison.OrdinalIgnoreCase))
                 {
-                    StopStream();
                     _log.Info("Client disconnected.");
                 }
                 else
                 {
-                    StopStream();
                     _log.Error("Host error", ex);
-                }   
+                }
             }
             finally
             {
-                _server.Stop(); 
+                _server.Stop();
             }
         }
+
+        private void StartStream(FramedMessageWriter writer, byte quality, byte fps, CancellationToken ct)
+        {
+            StopStream(); // If already streaming, restart cleanly.
+
+            _streamCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _streamTask = StreamLoopAsync(writer, quality, fps, _streamCts.Token);
+        }
+
         private void StopStream()
         {
-            if (_streamCts != null)
+            if (_streamCts == null)
+                return;
+
+            try
             {
-                _streamTask = null;
-                _streamCts?.Cancel();
+                _streamCts.Cancel();
+            }
+            catch
+            {
+                // ignore
+            }
+            finally
+            {
                 _streamCts.Dispose();
                 _streamCts = null;
+                _streamTask = null;
             }
         }
+
         private async Task StreamLoopAsync(FramedMessageWriter writer, byte quality, byte fps, CancellationToken ct)
         {
+            if (fps == 0)
+                return;
+
             int delayMs = 1000 / fps;
+
             while (!ct.IsCancellationRequested)
             {
-                var jpegBytes = CapturePrimaryScreenJpeg(quality);
+                byte[] jpegBytes = CapturePrimaryScreenJpeg(quality);
+
                 await writer.WriteAsync(MessageType.FrameJpeg, jpegBytes, ct);
                 await Task.Delay(delayMs, ct);
             }
         }
-        private byte[] CapturePrimaryScreenJpeg(byte quality)
+
+        private static byte[] CapturePrimaryScreenJpeg(byte quality)
         {
             int width = (int)SystemParameters.PrimaryScreenWidth;
             int height = (int)SystemParameters.PrimaryScreenHeight;
@@ -128,12 +183,14 @@ namespace LanRemoteDesktop.Host.Controllers
             IntPtr hDesktopDC = GetWindowDC(hDesktopWnd);
             IntPtr hMemDC = CreateCompatibleDC(hDesktopDC);
             IntPtr hBitmap = CreateCompatibleBitmap(hDesktopDC, width, height);
-
             IntPtr hOld = SelectObject(hMemDC, hBitmap);
+
             try
             {
-                // Copy screen into memory bitmap
-                if (!BitBlt(hMemDC, 0, 0, width, height, hDesktopDC, 0, 0, 0x00CC0020 | 0x40000000))
+                const int SRCCOPY = 0x00CC0020;
+                const int CAPTUREBLT = 0x40000000;
+
+                if (!BitBlt(hMemDC, 0, 0, width, height, hDesktopDC, 0, 0, SRCCOPY | CAPTUREBLT))
                     throw new InvalidOperationException("BitBlt failed.");
 
                 var bmpSource = Imaging.CreateBitmapSourceFromHBitmap(
@@ -159,6 +216,7 @@ namespace LanRemoteDesktop.Host.Controllers
                 ReleaseDC(hDesktopWnd, hDesktopDC);
             }
         }
+
         [DllImport("user32.dll")]
         private static extern IntPtr GetDesktopWindow();
 
