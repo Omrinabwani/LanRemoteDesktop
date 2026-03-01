@@ -14,7 +14,6 @@ namespace LanRemoteDesktop.Client
     public partial class MainWindow : Window
     {
         private readonly ClientController _controller = new ClientController();
-        private ClientSession? _session;
 
         private Point _lastMousePos;
         private bool _hasLastMousePos;
@@ -36,8 +35,6 @@ namespace LanRemoteDesktop.Client
                         720,
                         70,
                         CancellationToken.None);
-
-                    _session = session;
                 }
                 catch (Exception ex)
                 {
