@@ -139,23 +139,16 @@ namespace LanRemoteDesktop.Host.Controllers
 
         private void StopStream()
         {
-            if (_streamCts == null)
-                return;
+            var cts = _streamCts;
+            if (cts == null) return;
 
-            try
-            {
-                _streamCts.Cancel();
-            }
-            catch
-            {
-                // ignore
-            }
-            finally
-            {
-                _streamCts.Dispose();
-                _streamCts = null;
-                _streamTask = null;
-            }
+            _streamCts = null;
+
+            try { cts.Cancel(); }
+            finally { cts.Dispose(); }
+
+            _streamTask = null;
+            _log.Info("Streaming stopped.");
         }
 
         private async Task StreamLoopAsync(FramedMessageWriter writer, byte quality, byte fps, CancellationToken ct)

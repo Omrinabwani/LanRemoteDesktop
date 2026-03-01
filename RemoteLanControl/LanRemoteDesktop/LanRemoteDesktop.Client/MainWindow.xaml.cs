@@ -70,9 +70,14 @@ namespace LanRemoteDesktop.Client
 
         private async void Stop_Click(object sender, RoutedEventArgs e)
         {
-            // If you implement StopAsync later:
-            // await _controller.StopAsync();
-            await Task.CompletedTask;
+            try
+            {
+                await _controller.StopStreamAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Stop error");
+            }
         }
 
         private async void RemoteImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

@@ -107,6 +107,11 @@ namespace LanRemoteDesktop.Client.Controllers
                 }
             }
         }
+        public Task StopStreamAsync(CancellationToken ct = default)
+        {
+            if (_session == null) return Task.CompletedTask;
+            return _session.Writer.WriteAsync(MessageType.StopStream, Array.Empty<byte>(), ct);
+        }
 
         public Task SendMouseAsync(MouseAbsInputPayload payload)
         {
