@@ -79,7 +79,7 @@ namespace LanRemoteDesktop.Client
         {
             RemoteImage.Focus();
 
-            var payload = new MouseInputPayload(MouseFlags.LeftDown, 0, 0);
+            var payload = new MouseAbsInputPayload(MouseFlags.LeftDown, 0, 0);
             await _controller.SendMouseAsync(payload);
         }
 
@@ -87,19 +87,19 @@ namespace LanRemoteDesktop.Client
         {
             RemoteImage.Focus();
 
-            var payload = new MouseInputPayload(MouseFlags.RightDown, 0, 0);
+            var payload = new MouseAbsInputPayload(MouseFlags.RightDown, 0, 0);
             await _controller.SendMouseAsync(payload);
         }
 
         private async void RemoteImage_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            var payload = new MouseInputPayload(MouseFlags.LeftUp, 0, 0);
+            var payload = new MouseAbsInputPayload(MouseFlags.LeftUp, 0, 0);
             await _controller.SendMouseAsync(payload);
         }
 
         private async void RemoteImage_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
-            var payload = new MouseInputPayload(MouseFlags.RightUp, 0, 0);
+            var payload = new MouseAbsInputPayload(MouseFlags.RightUp, 0, 0);
             await _controller.SendMouseAsync(payload);
         }
 
@@ -114,7 +114,11 @@ namespace LanRemoteDesktop.Client
             // if (e.LeftButton != MouseButtonState.Pressed) return;
 
             var pos = e.GetPosition(RemoteImage);
+            double uiW = RemoteImage.ActualWidth;
+            double uiH = RemoteImage.ActualHeight;
 
+            ushort x = (ushort)Math.Clamp((int)Math.Round(pos.X * (1280.0 / uiW)), 0, 1279); // Resize so it fits the screen and not ui
+            ushort y = (ushort)Math.Clamp((int)Math.Round(pos.Y * (720.0 / uiH)), 0, 719); // Resize so it fits the screen and not the ui
             if (!_hasLastMousePos)
             {
                 _lastMousePos = pos;
@@ -122,23 +126,8 @@ namespace LanRemoteDesktop.Client
                 return;
             }
 
-            double dxD = pos.X - _lastMousePos.X;
-            double dyD = pos.Y - _lastMousePos.Y;
-            _lastMousePos = pos;
-
-            // Ignore tiny jitter (touchpad noise)
-            if (Math.Abs(dxD) < 1 && Math.Abs(dyD) < 1)
-                return;
-
-            int dxI = (int)Math.Round(dxD);
-            int dyI = (int)Math.Round(dyD);
-
-            if (dxI > short.MaxValue) dxI = short.MaxValue;
-            if (dxI < short.MinValue) dxI = short.MinValue;
-            if (dyI > short.MaxValue) dyI = short.MaxValue;
-            if (dyI < short.MinValue) dyI = short.MinValue;
-
-            var payload = new MouseInputPayload(MouseFlags.Move, (short)dxI, (short)dyI);
+            
+            var payload = new MouseAbsInputPayload(MouseFlags.Move, x, y);
 
             try
             {
@@ -152,8 +141,9 @@ namespace LanRemoteDesktop.Client
 
         private async void RemoteImage_KeyDown(object sender, KeyEventArgs e)
         {
-            ushort vk = (ushort)KeyInterop.VirtualKeyFromKey(e.Key);
-            var payload = new KeyboardInputPayload(vk, isDown: true);
+            var key = (e.Key == Key.System) ? e.SystemKey : e.Key;
+            ushort vk = (ushort)KeyInterop.VirtualKeyFromKey(key);
+            var payload = new KeyboardInputPayload(vk, true);
 
             await _controller.SendKeyboardAsync(payload);
             e.Handled = true;
@@ -161,8 +151,9 @@ namespace LanRemoteDesktop.Client
 
         private async void RemoteImage_KeyUp(object sender, KeyEventArgs e)
         {
-            ushort vk = (ushort)KeyInterop.VirtualKeyFromKey(e.Key);
-            var payload = new KeyboardInputPayload(vk, isDown: false);
+            var key = (e.Key == Key.System) ? e.SystemKey : e.Key;
+            ushort vk = (ushort)KeyInterop.VirtualKeyFromKey(key);
+            var payload = new KeyboardInputPayload(vk, false);
 
             await _controller.SendKeyboardAsync(payload);
             e.Handled = true;

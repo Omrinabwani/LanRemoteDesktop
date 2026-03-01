@@ -7,17 +7,17 @@ using System.Threading.Tasks;
 
 namespace LanRemoteDesktop.Common.Protocol
 {
-    public sealed class MouseInputPayload
+    public sealed class MouseAbsInputPayload
     {
         public MouseFlags Flags { get; }
-        public short Dx { get; }
-        public short Dy { get; }
+        public ushort X { get; }
+        public ushort Y { get; }
 
-        public MouseInputPayload(MouseFlags flags, short dx, short dy)
+        public MouseAbsInputPayload(MouseFlags flags, ushort x, ushort y)
         {
             Flags = flags;
-            Dx = dx;
-            Dy = dy;
+            X = x;
+            Y = y;
         }
         public byte[] Serialize()
         {
@@ -25,21 +25,21 @@ namespace LanRemoteDesktop.Common.Protocol
             const int size = 5; // Each ushort is 2 bytes and a byte is 1 byte so 2 * 2 + 1 = 5
             byte[] bytes = new byte[size];
             bytes[0] = (byte)Flags;
-            BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(1, 2), Dx);
-            BinaryPrimitives.WriteInt16LittleEndian(bytes.AsSpan(3, 2), Dy);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(1, 2), X);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(3, 2), Y);
             return bytes;
         }
 
-        public static MouseInputPayload Deserialize(ReadOnlySpan<byte> payload)
+        public static MouseAbsInputPayload Deserialize(ReadOnlySpan<byte> payload)
         {
             const int size = 5; // Each ushort is 2 bytes and a byte is 1 byte so 2 * 2 + 1 = 5
             if (payload.Length != size)
                 throw new ArgumentException($"MOUSE_INPUT payload must be {size} bytes, got {payload.Length}.");
             byte flags = payload[0];
-            short dx = BinaryPrimitives.ReadInt16LittleEndian(payload.Slice(1, 2));
-            short dy = BinaryPrimitives.ReadInt16LittleEndian(payload.Slice(3, 2));
-            MouseInputPayload mouseInputPayload = new MouseInputPayload((MouseFlags)flags, dx, dy);
-            return mouseInputPayload;
+            ushort x = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(1, 2));
+            ushort y = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(3, 2));
+            MouseAbsInputPayload mouseAbsInputPayload = new MouseAbsInputPayload((MouseFlags)flags, x, y);
+            return mouseAbsInputPayload;
         }
     }
 }

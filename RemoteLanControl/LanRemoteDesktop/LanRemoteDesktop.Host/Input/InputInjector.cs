@@ -4,11 +4,15 @@ namespace LanRemoteDesktop.Host.Input
 {
     public sealed class InputInjector
     {
-        public void InjectMouse(MouseInputPayload p)
+        public void InjectMouse(MouseAbsInputPayload p, ushort hostW, ushort hostH, ushort viewW, ushort viewH)
         {
-            if ((p.Flags & MouseFlags.Move) != 0)
-                Win32Input.MouseMoveRelative(p.Dx, p.Dy);
 
+            if ((p.Flags & MouseFlags.Move) != 0)
+            {
+                int hostX = (int)Math.Round(p.X * (hostW - 1) / (double)(viewW - 1));
+                int hostY = (int)Math.Round(p.Y * (hostH - 1) / (double)(viewH - 1));
+                Win32Input.MouseMoveAbsolute(hostX, hostY, hostW, hostH);
+            }
             if ((p.Flags & MouseFlags.LeftDown) != 0)
                 Win32Input.MouseLeftDown();
 

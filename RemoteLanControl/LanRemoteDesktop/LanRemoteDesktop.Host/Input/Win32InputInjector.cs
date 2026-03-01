@@ -64,7 +64,7 @@ namespace LanRemoteDesktop.Host.Input
         // Mouse helpers
         // ========================
 
-        public static void MouseMoveAbsolute(int x, int y, int screenWidth, int screenHeight)
+        public static void MouseMoveAbsolute(int x, int y, ushort screenWidth, ushort screenHeight)
         {
             int absX = (int)Math.Round(x * 65535.0 / (screenWidth - 1));
             int absY = (int)Math.Round(y * 65535.0 / (screenHeight - 1));

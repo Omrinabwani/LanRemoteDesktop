@@ -95,7 +95,7 @@ namespace LanRemoteDesktop.Host.Controllers
 
                         case MessageType.InputMouse:
                             _log.Info("InputMouse");
-                            _inputInjector.InjectMouse(MouseInputPayload.Deserialize(msgPayload));
+                            _inputInjector.InjectMouse(MouseAbsInputPayload.Deserialize(msgPayload), width, height, hello.ClientViewWidth, hello.ClientViewHeight);
                             break;
 
                         case MessageType.InputKeyboard:

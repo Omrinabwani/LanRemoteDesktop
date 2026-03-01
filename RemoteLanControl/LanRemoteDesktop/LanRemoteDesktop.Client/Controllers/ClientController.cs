@@ -108,7 +108,7 @@ namespace LanRemoteDesktop.Client.Controllers
             }
         }
 
-        public Task SendMouseAsync(MouseInputPayload payload)
+        public Task SendMouseAsync(MouseAbsInputPayload payload)
         {
             if (_session == null)
                 return Task.CompletedTask;
